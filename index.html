@@ -1,0 +1,1896 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SVG 编辑器 &amp; 导出工具</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #232735;
+      --border: #2e3348;
+      --text: #e2e4ed;
+      --text-dim: #8b8fa7;
+      --accent: #6c8cff;
+      --accent-hover: #8aa4ff;
+      --accent-bg: rgba(108, 140, 255, 0.1);
+      --success: #4ade80;
+      --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ─── Header ─── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    header h1 span { color: var(--accent); }
+
+    .counter {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ─── Toolbar ─── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toolbar-sep {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    button:hover { background: var(--border); }
+    button:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 500;
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    .btn-success {
+      background: #166534;
+      border-color: #166534;
+      color: #fff;
+    }
+    .btn-success:hover { background: #15803d; }
+
+    input[type="text"], input[type="number"] {
+      font-family: inherit;
+      font-size: 13px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: var(--accent); }
+
+    input[type="text"] { width: 140px; }
+    input[type="number"] { width: 70px; text-align: center; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+    .step-btn {
+      width: 22px; height: 22px;
+      padding: 0; font-size: 14px; line-height: 1;
+      border-radius: 4px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    label { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; }
+
+    /* ─── Main: preview full width ─── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pane-header {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      padding: 8px 16px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ─── Preview ─── */
+    .preview {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      transition: background-color 0.25s;
+      cursor: grab;
+    }
+    .preview.dragging { cursor: grabbing; }
+
+    .preview.bg-dark  { background-color: #1a1d27; }
+    .preview.bg-white { background-color: #ffffff; }
+    .preview.bg-checker {
+      background-color: #e0e0e0;
+      background-image:
+        linear-gradient(45deg, #ccc 25%, transparent 25%),
+        linear-gradient(-45deg, #ccc 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ccc 75%),
+        linear-gradient(-45deg, transparent 75%, #ccc 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    }
+
+    .preview-viewport {
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+    .preview-viewport svg {
+      max-width: 60vw;
+      max-height: 60vh;
+    }
+    .preview.bg-dark .preview-viewport svg { filter: drop-shadow(0 4px 24px rgba(0,0,0,0.4)); }
+    .preview.bg-white .preview-viewport svg,
+    .preview.bg-checker .preview-viewport svg { filter: drop-shadow(0 4px 16px rgba(0,0,0,0.12)); }
+
+    .preview-placeholder {
+      color: var(--text-dim);
+      font-size: 14px;
+      text-align: center;
+      line-height: 2;
+    }
+    .preview-error {
+      color: #f87171;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      padding: 12px 16px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 8px;
+      max-width: 400px;
+      word-break: break-all;
+    }
+
+    /* ─── Zoom controls ─── */
+    .zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: 8px;
+    }
+    .zoom-controls button {
+      width: 24px; height: 24px;
+      padding: 0;
+      font-size: 14px;
+      line-height: 1;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .zoom-controls button:hover { color: var(--text); background: var(--surface-2); }
+    .zoom-pct {
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 42px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+    .zoom-pct:hover { color: var(--text); }
+
+    /* ─── BG mode buttons ─── */
+    .bg-modes {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: auto;
+    }
+    .bg-modes button {
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .bg-modes button:hover { color: var(--text); background: var(--surface-2); }
+    .bg-modes button.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+    .bg-swatch {
+      width: 12px; height: 12px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.15);
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 2px;
+    }
+
+    /* ═══════════════════════════════════════════
+       FLOATING EDITOR — Liquid Glass
+       ═══════════════════════════════════════════ */
+
+    /* ─── Trigger icon ─── */
+    .editor-trigger {
+      position: fixed;
+      bottom: 48px;
+      left: 24px;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      z-index: 90;
+      cursor: pointer;
+      overflow: hidden;
+      background: rgba(26, 29, 39, 0.75);
+      backdrop-filter: blur(16px) saturate(1.4);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition:
+        transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.4s ease,
+        box-shadow 0.3s ease;
+    }
+    .editor-trigger img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      pointer-events: none;
+      transition: transform 0.3s ease;
+    }
+    .editor-trigger:hover {
+      box-shadow:
+        0 8px 32px rgba(108, 140, 255, 0.25),
+        0 0 0 1px rgba(108, 140, 255, 0.15) inset;
+    }
+    .editor-trigger:hover img {
+      transform: scale(1.12);
+    }
+    .editor-trigger.hidden {
+      transform: scale(0.3);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* ─── Floating panel ─── */
+    .editor-float {
+      position: fixed;
+      z-index: 85;
+      display: flex;
+      flex-direction: column;
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(20, 22, 32, 0.82);
+      backdrop-filter: blur(28px) saturate(1.6);
+      -webkit-backdrop-filter: blur(28px) saturate(1.6);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      box-shadow:
+        0 24px 80px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+        0 1px 0 rgba(255, 255, 255, 0.06) inset;
+      /* transform origin: bottom-left (icon position) */
+      transform-origin: bottom left;
+      /* collapsed state */
+      transform: scale(0.06) translate(0, 0);
+      opacity: 0;
+      pointer-events: none;
+      /* liquid glass transition */
+      transition:
+        transform 0.65s cubic-bezier(0.22, 1.2, 0.36, 1),
+        opacity 0.35s ease,
+        border-radius 0.5s ease,
+        box-shadow 0.4s ease;
+      will-change: transform, opacity;
+    }
+
+    .editor-float.open {
+      transform: scale(1) translate(0, 0);
+      opacity: 1;
+      pointer-events: auto;
+      border-radius: 14px;
+    }
+
+    /* drag handle for moving */
+    .editor-float-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      cursor: move;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .editor-float-header .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 2px solid;
+      flex-shrink: 0;
+    }
+    .editor-float-header .dot.close { border-color: #f87171; }
+    .editor-float-header .dot.min { border-color: #fbbf24; }
+    .editor-float-header .dot.max { border-color: #4ade80; }
+    .editor-float-header .title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-left: 6px;
+    }
+
+    /* ─── Syntax-highlighted editor ─── */
+    .editor-body {
+      flex: 1;
+      display: grid;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .editor-body > * {
+      grid-area: 1 / 1;
+    }
+    .highlight-layer {
+      margin: 0;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      tab-size: 2;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow: hidden;
+      pointer-events: none;
+      color: var(--text);
+    }
+    .highlight-layer code {
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+    }
+    .editor-body textarea {
+      resize: none;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: transparent;
+      caret-color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      padding: 14px 16px;
+      tab-size: 2;
+      min-height: 0;
+      z-index: 1;
+    }
+    .editor-body textarea::placeholder { color: transparent; }
+    .editor-placeholder {
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-dim);
+      opacity: 0.4;
+      pointer-events: none;
+      white-space: pre-wrap;
+    }
+
+    /* Syntax colors */
+    .syn-tag { color: #f472b6; }         /* < > / </ >  */
+    .syn-attr { color: #c084fc; }        /* attribute names */
+    .syn-str { color: #4ade80; }         /* attribute values */
+    .syn-comment { color: #6b7280; font-style: italic; }
+    .syn-cdata { color: #6b7280; }
+    .syn-doctype { color: #fbbf24; }
+    .syn-number { color: #38bdf8; }      /* numeric attribute values */
+    .syn-cmd { color: #f472b6; }         /* \command */
+    .syn-env { color: #c084fc; }         /* environment name */
+    .syn-brace { color: #fbbf24; }       /* { } */
+    .syn-coord { color: #38bdf8; }       /* (x,y) coordinates */
+
+    /* Code type label */
+    .code-type-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: all 0.25s ease;
+    }
+    .code-type-label.svg {
+      background: rgba(108, 140, 255, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(108, 140, 255, 0.25);
+    }
+    .code-type-label.tikz {
+      background: rgba(244, 114, 182, 0.15);
+      color: #f472b6;
+      border: 1px solid rgba(244, 114, 182, 0.25);
+    }
+    .code-type-label.none {
+      background: rgba(139, 143, 167, 0.1);
+      color: var(--text-dim);
+      border: 1px solid rgba(139, 143, 167, 0.15);
+    }
+
+    /* TikZ loading spinner */
+    .preview-loading {
+      color: var(--text-dim);
+      font-size: 14px;
+      text-align: center;
+      line-height: 2;
+    }
+    .preview-loading::after {
+      content: '';
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* resize handle (bottom-right) */
+    .editor-resize-handle {
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 18px; height: 18px;
+      cursor: nwse-resize;
+      z-index: 2;
+    }
+    .editor-resize-handle::after {
+      content: '';
+      position: absolute;
+      bottom: 5px; right: 5px;
+      width: 8px; height: 8px;
+      border-right: 2px solid rgba(255,255,255,0.15);
+      border-bottom: 2px solid rgba(255,255,255,0.15);
+    }
+
+    /* hover glow ring on icon */
+    .editor-trigger::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 18px;
+      background: conic-gradient(
+        from 0deg,
+        transparent 0%,
+        rgba(108, 140, 255, 0.25) 25%,
+        transparent 50%,
+        rgba(108, 140, 255, 0.15) 75%,
+        transparent 100%
+      );
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      z-index: -1;
+      animation: glowSpin 3s linear infinite;
+    }
+    .editor-trigger:hover::after {
+      opacity: 1;
+    }
+    @keyframes glowSpin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* progress ring on hover */
+    .editor-trigger .hover-ring {
+      position: absolute;
+      inset: -3px;
+      border-radius: 19px;
+      border: 2px solid transparent;
+      border-top-color: var(--accent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .editor-trigger.hovering .hover-ring {
+      opacity: 1;
+      animation: hoverProgress 1s linear forwards;
+    }
+    @keyframes hoverProgress {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* ─── Status bar ─── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 16px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-dot.ok { background: var(--success); }
+    .status-dot.err { background: #f87171; }
+    .status-dot.idle { background: var(--text-dim); }
+
+    /* ─── Toast ─── */
+    .toast-container {
+      position: fixed;
+      bottom: 40px;
+      right: 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #fff;
+      animation: toastIn 0.25s ease-out;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .toast.success { background: #166534; }
+    .toast.error { background: #991b1b; }
+    .toast.info { background: #1e40af; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } }
+
+    /* ─── History panel ─── */
+    .history-panel {
+      position: fixed;
+      top: 0; right: -320px;
+      width: 320px; height: 100%;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      z-index: 50;
+      transition: right 0.25s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .history-panel.open { right: 0; }
+    .history-panel .pane-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .history-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .select-all-label {
+      font-size: 12px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .history-item-check {
+      flex-shrink: 0;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .history-item:hover { background: var(--surface-2); }
+    .history-thumb {
+      width: 40px; height: 40px;
+      border-radius: 4px;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .history-thumb svg { width: 28px; height: 28px; }
+    .history-meta { min-width: 0; }
+    .history-meta .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-meta .time { font-size: 11px; color: var(--text-dim); }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 700px) {
+      .editor-float { width: calc(100vw - 32px) !important; left: 16px !important; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><span>&lt;SVG/&gt;</span> 编辑器</h1>
+  <div class="counter" id="exportCounter">已导出: 0 个文件</div>
+</header>
+
+<div class="toolbar">
+  <div class="toolbar-group">
+    <label>文件名 <input type="text" id="fileName" value="icon" placeholder="文件名"></label>
+    <label>起始编号
+      <button type="button" class="step-btn" id="startNumDec" title="减少">−</button>
+      <input type="number" id="startNum" value="1" min="0" step="any">
+      <button type="button" class="step-btn" id="startNumInc" title="增加">+</button>
+    </label>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <button class="btn-primary" id="btnExport" title="导出当前 SVG">导出 SVG</button>
+    <button class="btn-success" id="btnExportAll" title="打开历史记录面板选择导出">批量导出</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <button id="btnFormat" title="格式化 SVG 代码">格式化</button>
+    <button id="btnClear" title="清空编辑器">清空</button>
+    <button id="btnConfirm" title="确认当前渲染图形并计入历史记录">确认</button>
+    <button id="btnHistory" title="查看导出历史">历史记录</button>
+  </div>
+  <div class="toolbar-group" style="margin-left:auto;">
+    <button id="btnPickFolder" title="选择导出文件夹">选择文件夹</button>
+    <span id="folderLabel" style="font-size:12px;color:var(--text-dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Toolbar bar sits outside preview so buttons stay clickable -->
+  <div class="pane-header" style="display:flex;align-items:center;flex-shrink:0;">
+    实时预览
+    <div class="zoom-controls" id="zoomControls">
+      <button id="zoomOut" title="缩小 (滚轮下)">−</button>
+      <span class="zoom-pct" id="zoomPct" title="点击重置">100%</span>
+      <button id="zoomIn" title="放大 (滚轮上)">+</button>
+      <button id="zoomReset" title="重置视图" style="font-size:11px;width:auto;padding:0 6px;">重置</button>
+    </div>
+    <div class="bg-modes" id="bgModes">
+      <button data-bg="bg-white" class="active" title="白色背景"><span class="bg-swatch" style="background:#ffffff;border-color:rgba(0,0,0,0.15);"></span>白色</button>
+      <button data-bg="bg-dark" title="深色背景"><span class="bg-swatch" style="background:#1a1d27;"></span>深色</button>
+      <button data-bg="bg-checker" title="棋盘格背景"><span class="bg-swatch" style="background:repeating-conic-gradient(#ccc 0% 25%, #e0e0e0 0% 50%) 0 0/8px 8px;"></span>棋盘</button>
+    </div>
+  </div>
+  <div class="preview bg-white" id="preview" style="flex:1;">
+    <div class="preview-viewport" id="previewViewport">
+      <div class="preview-placeholder">悬停左下角图标 1 秒打开编辑器<br>或直接点击图标</div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span><span class="status-dot idle" id="statusDot"></span><span id="statusText">就绪</span></span>
+  <span id="charCount">0 字符</span>
+</div>
+
+<!-- Floating editor trigger icon -->
+<div class="editor-trigger" id="editorTrigger" title="悬停 1 秒或点击打开编辑器">
+  <div class="hover-ring"></div>
+  <img src="image.png" alt="编辑器">
+</div>
+
+<!-- Floating editor panel (positioned by JS) -->
+<div class="editor-float" id="editorFloat">
+  <div class="editor-float-header" id="editorDrag">
+    <span class="dot close" id="editorClose" title="关闭"></span>
+    <span class="dot min"></span>
+    <span class="dot max"></span>
+    <span class="title">代码编辑器</span>
+      <span class="code-type-label none" id="codeTypeLabel">空</span>
+  </div>
+  <div class="editor-body">
+    <pre class="highlight-layer" id="highlightLayer"><code id="highlightCode"></code></pre>
+    <div class="editor-placeholder" id="editorPlaceholder">在此粘贴或输入 SVG / TikZ 代码...<br><br>SVG 示例:<br>&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"&gt;<br>  &lt;circle cx="50" cy="50" r="40" fill="#6c8cff"/&gt;<br>&lt;/svg&gt;<br><br>TikZ 示例:<br>\begin{tikzpicture}<br>  \draw (0,0) circle (1);<br>  \fill[blue] (0,0) circle (0.1);<br>\end{tikzpicture}</div>
+    <textarea id="editor" spellcheck="false"></textarea>
+  </div>
+  <div class="editor-resize-handle" id="editorResize"></div>
+</div>
+
+<!-- History panel -->
+<div class="history-panel" id="historyPanel">
+  <div class="pane-header">
+    导出历史
+    <button id="btnCloseHistory" style="padding:2px 8px;font-size:16px;">&times;</button>
+  </div>
+  <div class="history-actions">
+    <label class="select-all-label"><input type="checkbox" id="selectAllHistory"> 全选</label>
+    <button id="btnExportSelected" class="btn-success" style="padding:3px 10px;font-size:11px;" title="导出选中的历史记录">导出选中</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+(() => {
+  // ─── State ───
+  let dirHandle = null;
+  let exportCount = 0;
+  let history = [];
+  let currentNum = 1;
+
+  // Calculate step size from the smallest decimal place of a number
+  // e.g. 3 → 1, 3.2 → 0.1, 3.25 → 0.01
+  function calcStep(val) {
+    const str = String(val);
+    const dot = str.indexOf('.');
+    if (dot === -1) return 1;
+    const decimals = str.length - dot - 1;
+    return Math.pow(10, -decimals);
+  }
+  let scale = 1;
+  let panX = 0, panY = 0;
+  let isPanning = false;
+  let panStartX, panStartY, panOriginX, panOriginY;
+
+  // Editor float state
+  let editorOpen = false;
+  let hoverTimer = null;
+  let collapseTimer = null;
+  let isDragging = false;
+  let isResizing = false;
+  let dragOffX, dragOffY;
+
+  // Code type state
+  let currentCodeType = 'none'; // 'svg' | 'tikz' | 'none'
+  let renderedSvgContent = null;
+
+  // ─── DOM refs ───
+  const editor = document.getElementById('editor');
+  const editorFloat = document.getElementById('editorFloat');
+  const editorTrigger = document.getElementById('editorTrigger');
+  const editorDrag = document.getElementById('editorDrag');
+  const editorClose = document.getElementById('editorClose');
+  const editorResize = document.getElementById('editorResize');
+  const preview = document.getElementById('preview');
+  const viewport = document.getElementById('previewViewport');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const charCount = document.getElementById('charCount');
+  const exportCounter = document.getElementById('exportCounter');
+  const fileName = document.getElementById('fileName');
+  const startNum = document.getElementById('startNum');
+  const folderLabel = document.getElementById('folderLabel');
+  const historyPanel = document.getElementById('historyPanel');
+  const historyList = document.getElementById('historyList');
+  const zoomPct = document.getElementById('zoomPct');
+  const codeTypeLabel = document.getElementById('codeTypeLabel');
+
+  // Default editor position / size
+  const EDITOR_DEFAULTS = { left: 80, bottom: 48, width: 480, height: 380 };
+
+  function positionEditorCollapsed() {
+    const tr = editorTrigger.getBoundingClientRect();
+    editorFloat.style.left = tr.left + 'px';
+    editorFloat.style.top = tr.top + 'px';
+    editorFloat.style.width = tr.width + 'px';
+    editorFloat.style.height = tr.height + 'px';
+  }
+
+  function positionEditorOpen() {
+    const vh = window.innerHeight;
+    const w = EDITOR_DEFAULTS.width;
+    const h = EDITOR_DEFAULTS.height;
+    editorFloat.style.left = EDITOR_DEFAULTS.left + 'px';
+    editorFloat.style.top = (vh - h - EDITOR_DEFAULTS.bottom) + 'px';
+    editorFloat.style.width = w + 'px';
+    editorFloat.style.height = h + 'px';
+  }
+
+  // ─── Open / Close editor ───
+  function openEditor() {
+    clearTimeout(hoverTimer);
+    clearTimeout(collapseTimer);
+    if (editorOpen) return;
+    editorOpen = true;
+
+    // Start from icon position
+    positionEditorCollapsed();
+    editorTrigger.classList.add('hidden');
+
+    // Next frame: expand
+    requestAnimationFrame(() => {
+      positionEditorOpen();
+      editorFloat.classList.add('open');
+      // Focus after animation
+      setTimeout(() => editor.focus(), 400);
+    });
+  }
+
+  function closeEditor() {
+    if (!editorOpen) return;
+    editorOpen = false;
+    clearTimeout(collapseTimer);
+
+    // Collapse to icon position
+    positionEditorCollapsed();
+    editorFloat.classList.remove('open');
+
+    setTimeout(() => {
+      editorTrigger.classList.remove('hidden');
+    }, 350);
+  }
+
+  // ─── Trigger: hover to open ───
+  editorTrigger.addEventListener('mouseenter', () => {
+    clearTimeout(collapseTimer);
+    editorTrigger.classList.add('hovering');
+    hoverTimer = setTimeout(openEditor, 1000);
+  });
+
+  editorTrigger.addEventListener('mouseleave', () => {
+    editorTrigger.classList.remove('hovering');
+    clearTimeout(hoverTimer);
+  });
+
+  // Also allow click to open immediately
+  editorTrigger.addEventListener('click', () => {
+    clearTimeout(hoverTimer);
+    editorTrigger.classList.remove('hovering');
+    openEditor();
+  });
+
+  // ─── Auto-collapse on mouse leave ───
+  editorFloat.addEventListener('mouseenter', () => {
+    clearTimeout(collapseTimer);
+  });
+
+  editorFloat.addEventListener('mouseleave', (e) => {
+    if (isDragging || isResizing) return;
+    // Only collapse if not focused in textarea
+    if (document.activeElement === editor) return;
+    collapseTimer = setTimeout(closeEditor, 800);
+  });
+
+  // Collapse when clicking outside
+  document.addEventListener('mousedown', (e) => {
+    if (!editorOpen) return;
+    if (editorFloat.contains(e.target) || editorTrigger.contains(e.target)) return;
+    closeEditor();
+  });
+
+  // Close button
+  editorClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeEditor();
+  });
+
+  // ─── Drag to move ───
+  editorDrag.addEventListener('mousedown', (e) => {
+    if (e.target === editorClose) return;
+    isDragging = true;
+    const rect = editorFloat.getBoundingClientRect();
+    dragOffX = e.clientX - rect.left;
+    dragOffY = e.clientY - rect.top;
+    editorFloat.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      editorFloat.style.left = (e.clientX - dragOffX) + 'px';
+      editorFloat.style.top = (e.clientY - dragOffY) + 'px';
+    }
+    if (isResizing) {
+      const rect = editorFloat.getBoundingClientRect();
+      editorFloat.style.width = Math.max(280, e.clientX - rect.left) + 'px';
+      editorFloat.style.height = Math.max(180, e.clientY - rect.top) + 'px';
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      restoreEditorTransition();
+    }
+    if (isResizing) {
+      isResizing = false;
+      restoreEditorTransition();
+    }
+  });
+
+  // ─── Resize ───
+  editorResize.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    editorFloat.style.transition = 'none';
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  function restoreEditorTransition() {
+    editorFloat.style.transition = '';
+  }
+
+  // ─── Syntax Highlighting ───
+  const highlightCode = document.getElementById('highlightCode');
+  const highlightLayer = document.getElementById('highlightLayer');
+  const editorPlaceholder = document.getElementById('editorPlaceholder');
+
+  function highlightSvg(code) {
+    let result = '';
+    let i = 0;
+    const len = code.length;
+
+    while (i < len) {
+      // Comments <!-- ... -->
+      if (code.startsWith('<!--', i)) {
+        const end = code.indexOf('-->', i + 4);
+        const chunk = end === -1 ? code.slice(i) : code.slice(i, end + 3);
+        result += `<span class="syn-comment">${escHtml(chunk)}</span>`;
+        i += chunk.length;
+        continue;
+      }
+
+      // CDATA <![CDATA[ ... ]]>
+      if (code.startsWith('<![CDATA[', i)) {
+        const end = code.indexOf(']]>', i + 9);
+        const chunk = end === -1 ? code.slice(i) : code.slice(i, end + 3);
+        result += `<span class="syn-cdata">${escHtml(chunk)}</span>`;
+        i += chunk.length;
+        continue;
+      }
+
+      // DOCTYPE
+      if (code.startsWith('<!DOCTYPE', i) || code.startsWith('<!doctype', i)) {
+        const end = code.indexOf('>', i);
+        const chunk = end === -1 ? code.slice(i) : code.slice(i, end + 1);
+        result += `<span class="syn-doctype">${escHtml(chunk)}</span>`;
+        i += chunk.length;
+        continue;
+      }
+
+      // Tags < ... >
+      if (code[i] === '<') {
+        // find closing >
+        const end = code.indexOf('>', i);
+        if (end === -1) {
+          result += escHtml(code.slice(i));
+          break;
+        }
+        const tagContent = code.slice(i, end + 1);
+        result += highlightTag(tagContent);
+        i = end + 1;
+        continue;
+      }
+
+      // Text content
+      const nextTag = code.indexOf('<', i);
+      const chunk = nextTag === -1 ? code.slice(i) : code.slice(i, nextTag);
+      result += escHtml(chunk);
+      i += chunk.length;
+    }
+
+    return result;
+  }
+
+  function highlightTag(tag) {
+    // Self-closing: <tagname attr="val" /> or closing: </tagname>
+    // Opening: <tagname attr="val">
+    let result = '';
+    let pos = 0;
+
+    // Opening bracket
+    if (tag[pos] === '<') {
+      result += '<span class="syn-tag">&lt;';
+      pos++;
+      // closing tag slash
+      if (tag[pos] === '/') {
+        result += '/';
+        pos++;
+      }
+      result += '</span>';
+    }
+
+    // Tag name
+    const nameMatch = tag.slice(pos).match(/^[a-zA-Z_][\w:-]*/);
+    if (nameMatch) {
+      result += `<span class="syn-tag">${escHtml(nameMatch[0])}</span>`;
+      pos += nameMatch[0].length;
+    }
+
+    // Attributes
+    while (pos < tag.length) {
+      // Skip whitespace
+      const wsMatch = tag.slice(pos).match(/^\s+/);
+      if (wsMatch) {
+        result += wsMatch[0];
+        pos += wsMatch[0].length;
+      }
+
+      // End of tag
+      if (tag[pos] === '>' || (tag[pos] === '/' && tag[pos + 1] === '>')) {
+        if (tag[pos] === '/') {
+          result += '<span class="syn-tag">/</span>';
+          pos++;
+        }
+        if (tag[pos] === '>') {
+          result += '<span class="syn-tag">&gt;</span>';
+          pos++;
+        }
+        break;
+      }
+
+      // Attribute name
+      const attrMatch = tag.slice(pos).match(/^[a-zA-Z_:@][\w:.-]*/);
+      if (attrMatch) {
+        result += `<span class="syn-attr">${escHtml(attrMatch[0])}</span>`;
+        pos += attrMatch[0].length;
+      } else if (pos < tag.length && tag[pos] !== '>') {
+        // unknown char, just emit
+        result += escHtml(tag[pos]);
+        pos++;
+        continue;
+      }
+
+      // = sign
+      if (tag[pos] === '=') {
+        result += '=';
+        pos++;
+      }
+
+      // Attribute value (quoted string or number)
+      if (tag[pos] === '"' || tag[pos] === "'") {
+        const quote = tag[pos];
+        const valEnd = tag.indexOf(quote, pos + 1);
+        if (valEnd === -1) {
+          result += `<span class="syn-str">${escHtml(tag.slice(pos))}</span>`;
+          pos = tag.length;
+        } else {
+          const val = tag.slice(pos, valEnd + 1);
+          result += `<span class="syn-str">${escHtml(val)}</span>`;
+          pos = valEnd + 1;
+        }
+      } else {
+        // Unquoted value (number or token)
+        const valMatch = tag.slice(pos).match(/^[^\s>]+/);
+        if (valMatch) {
+          const cls = /^\d+(\.\d+)?$/.test(valMatch[0]) ? 'syn-number' : 'syn-str';
+          result += `<span class="${cls}">${escHtml(valMatch[0])}</span>`;
+          pos += valMatch[0].length;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // ─── Code Type Detection ───
+  function detectCodeType(code) {
+    if (!code || !code.trim()) return 'none';
+    const trimmed = code.trim();
+
+    // SVG detection: code starting with < and containing tags
+    if (/^\s*</.test(trimmed) && /<\w+[\s>]/.test(trimmed)) {
+      return 'svg';
+    }
+
+    // TikZ detection: look for common TikZ/LaTeX markers
+    const tikzPatterns = [
+      /\\begin\{tikzpicture\}/i,
+      /\\draw\b/i,
+      /\\node\b/i,
+      /\\fill\b/i,
+      /\\path\b/i,
+      /\\shade\b/i,
+      /\\clip\b/i,
+      /\\foreach\b/i,
+      /\\coordinate\b/i,
+      /\\usetikzlibrary/i,
+    ];
+    for (const pat of tikzPatterns) {
+      if (pat.test(trimmed)) return 'tikz';
+    }
+
+    return 'none';
+  }
+
+  function updateCodeTypeLabel(type) {
+    currentCodeType = type;
+    codeTypeLabel.className = `code-type-label ${type}`;
+    switch (type) {
+      case 'svg': codeTypeLabel.textContent = 'SVG'; break;
+      case 'tikz': codeTypeLabel.textContent = 'TikZ'; break;
+      default: codeTypeLabel.textContent = '空'; break;
+    }
+  }
+
+  // ─── TikZ Syntax Highlighting ───
+  function highlightTikz(code) {
+    let result = '';
+    let i = 0;
+    const len = code.length;
+
+    while (i < len) {
+      // Line comments: % ...
+      if (code[i] === '%') {
+        const end = code.indexOf('\n', i);
+        const chunk = end === -1 ? code.slice(i) : code.slice(i, end);
+        result += `<span class="syn-comment">${escHtml(chunk)}</span>`;
+        i += chunk.length;
+        continue;
+      }
+
+      // Escape sequences: \command
+      if (code[i] === '\\' && i + 1 < len) {
+        // \begin{env} or \end{env}
+        const envMatch = code.slice(i).match(/^\\(begin|end)\{([^}]*)\}/);
+        if (envMatch) {
+          result += `<span class="syn-cmd">${escHtml('\\' + envMatch[1])}</span>`;
+          result += `<span class="syn-brace">{</span>`;
+          result += `<span class="syn-env">${escHtml(envMatch[2])}</span>`;
+          result += `<span class="syn-brace">}</span>`;
+          i += envMatch[0].length;
+          continue;
+        }
+        // Regular commands: \commandname
+        const cmdMatch = code.slice(i).match(/^\\([a-zA-Z]+)/);
+        if (cmdMatch) {
+          result += `<span class="syn-cmd">${escHtml(cmdMatch[0])}</span>`;
+          i += cmdMatch[0].length;
+          continue;
+        }
+        // Escaped special chars: \{ \} \& etc.
+        result += `<span class="syn-cmd">${escHtml(code.slice(i, i + 2))}</span>`;
+        i += 2;
+        continue;
+      }
+
+      // Coordinates: (x,y) or (x,y,z)
+      if (code[i] === '(') {
+        const end = code.indexOf(')', i);
+        if (end !== -1) {
+          const coord = code.slice(i, end + 1);
+          result += `<span class="syn-coord">${escHtml(coord)}</span>`;
+          i = end + 1;
+          continue;
+        }
+      }
+
+      // Braces { }
+      if (code[i] === '{' || code[i] === '}') {
+        result += `<span class="syn-brace">${code[i]}</span>`;
+        i++;
+        continue;
+      }
+
+      // Brackets [ ] (option brackets)
+      if (code[i] === '[') {
+        const end = code.indexOf(']', i);
+        if (end !== -1) {
+          const opt = code.slice(i, end + 1);
+          // Highlight key=value inside options
+          result += highlightTikzOptions(opt);
+          i = end + 1;
+          continue;
+        }
+      }
+
+      // Numbers (standalone)
+      const numMatch = code.slice(i).match(/^-?\d+\.?\d*/);
+      if (numMatch && (i === 0 || /[\s,;=:(]/.test(code[i - 1]))) {
+        result += `<span class="syn-number">${escHtml(numMatch[0])}</span>`;
+        i += numMatch[0].length;
+        continue;
+      }
+
+      // Hyphen/dash used as TikZ arrow spec or option separator
+      if (code[i] === '-' && code[i + 1] === '>') {
+        result += `<span class="syn-cmd">-&gt;</span>`;
+        i += 2;
+        continue;
+      }
+      if (code[i] === '-' && code[i + 1] === '-') {
+        result += `<span class="syn-cmd">--</span>`;
+        i += 2;
+        continue;
+      }
+
+      // Regular text
+      result += escHtml(code[i]);
+      i++;
+    }
+
+    return result;
+  }
+
+  function highlightTikzOptions(opt) {
+    // opt is like "[red, thick, line width=2pt]"
+    let result = '<span class="syn-brace">[</span>';
+    const inner = opt.slice(1, -1);
+    let pos = 0;
+    while (pos < inner.length) {
+      // Skip whitespace and commas
+      const wsMatch = inner.slice(pos). match(/^[\s,]+/);
+      if (wsMatch) {
+        result += wsMatch[0];
+        pos += wsMatch[0].length;
+      }
+      // key=value
+      const kvMatch = inner.slice(pos).match(/^([a-zA-Z][\w\s.-]*?)(\s*=\s*)([^\s,\]]+|"[^"]*")/);
+      if (kvMatch) {
+        result += `<span class="syn-attr">${escHtml(kvMatch[1].trim())}</span>`;
+        result += '=';
+        const val = kvMatch[3];
+        result += /^\d/.test(val) ? `<span class="syn-number">${escHtml(val)}</span>` : `<span class="syn-str">${escHtml(val)}</span>`;
+        pos += kvMatch[0].length;
+        continue;
+      }
+      // Color / keyword
+      const kwMatch = inner.slice(pos).match(/^[a-zA-Z][\w-]*/);
+      if (kwMatch) {
+        result += `<span class="syn-str">${escHtml(kwMatch[0])}</span>`;
+        pos += kwMatch[0].length;
+        continue;
+      }
+      if (pos < inner.length) {
+        result += escHtml(inner[pos]);
+        pos++;
+      }
+    }
+    result += '<span class="syn-brace">]</span>';
+    return result;
+  }
+
+  function updateHighlight() {
+    const code = editor.value;
+    editorPlaceholder.style.display = code ? 'none' : 'block';
+    if (!code) {
+      highlightCode.innerHTML = '';
+      updateCodeTypeLabel('none');
+      return;
+    }
+    const type = detectCodeType(code);
+    updateCodeTypeLabel(type);
+    if (type === 'tikz') {
+      highlightCode.innerHTML = highlightTikz(code) + '\n';
+    } else {
+      highlightCode.innerHTML = highlightSvg(code) + '\n';
+    }
+  }
+
+  // Sync scroll between textarea and highlight layer
+  editor.addEventListener('scroll', () => {
+    highlightLayer.scrollTop = editor.scrollTop;
+    highlightLayer.scrollLeft = editor.scrollLeft;
+  });
+
+  // ─── Live preview ───
+  let renderTimer;
+  editor.addEventListener('input', () => {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, 120);
+    charCount.textContent = `${editor.value.length} 字符`;
+    updateHighlight();
+  });
+
+  function render() {
+    const code = editor.value.trim();
+    if (!code) {
+      viewport.innerHTML = '<div class="preview-placeholder">悬停左下角图标 1 秒打开编辑器<br>或直接点击图标</div>';
+      setStatus('idle', '就绪');
+      renderedSvgContent = null;
+      return;
+    }
+
+    const type = detectCodeType(code);
+
+    if (type === 'tikz') {
+      renderedSvgContent = null; // clear stale content before async compile
+      renderTikz(code);
+      return;
+    }
+
+    // SVG rendering (original logic)
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(code, 'image/svg+xml');
+    const parseError = doc.querySelector('parsererror');
+
+    if (parseError) {
+      viewport.innerHTML = `<div class="preview-error">${escHtml(parseError.textContent.slice(0, 300))}</div>`;
+      setStatus('err', 'SVG 解析错误');
+      renderedSvgContent = null;
+      return;
+    }
+
+    const svg = doc.documentElement;
+    if (svg.tagName.toLowerCase() !== 'svg') {
+      viewport.innerHTML = '<div class="preview-error">根元素不是 &lt;svg&gt;</div>';
+      setStatus('err', '根元素错误');
+      renderedSvgContent = null;
+      return;
+    }
+
+    if (!svg.getAttribute('xmlns')) {
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    }
+
+    viewport.innerHTML = '';
+    viewport.appendChild(svg.cloneNode(true));
+    renderedSvgContent = svg.outerHTML;
+    scale = 1; panX = 0; panY = 0;
+    applyTransform();
+    setStatus('ok', '渲染成功');
+  }
+
+  // ─── TikZ Compilation ───
+  let tikzAbortController = null;
+
+  async function renderTikz(code) {
+    // Cancel any in-flight compilation
+    if (tikzAbortController) tikzAbortController.abort();
+    tikzAbortController = new AbortController();
+
+    viewport.innerHTML = '<div class="preview-loading">正在编译 TikZ...</div>';
+    setStatus('idle', '编译中...');
+
+    try {
+      const svgContent = await compileTikz(code, tikzAbortController.signal);
+      if (!svgContent) return; // aborted
+
+      // Parse the compiled SVG
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgContent, 'image/svg+xml');
+      const parseError = doc.querySelector('parsererror');
+
+      if (parseError) {
+        viewport.innerHTML = `<div class="preview-error">TikZ 编译结果解析失败: ${escHtml(parseError.textContent.slice(0, 300))}</div>`;
+        setStatus('err', '编译结果错误');
+        renderedSvgContent = null;
+        return;
+      }
+
+      const svg = doc.documentElement;
+      if (!svg.getAttribute('xmlns')) {
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      }
+
+      viewport.innerHTML = '';
+      viewport.appendChild(svg.cloneNode(true));
+      renderedSvgContent = svg.outerHTML;
+      scale = 1; panX = 0; panY = 0;
+      applyTransform();
+      setStatus('ok', '渲染成功 (本地编译)');
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      viewport.innerHTML = `<div class="preview-error">TikZ 编译失败: ${escHtml(e.message.slice(0, 300))}</div>`;
+      setStatus('err', 'TikZ 编译错误');
+      renderedSvgContent = null;
+    }
+  }
+
+  async function compileTikz(code, signal) {
+    const latexDoc = wrapTikzDocument(code);
+    const localUrl = 'http://localhost:3939/compile';
+
+    const resp = await fetch(localUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: latexDoc,
+      signal: AbortSignal.any
+        ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
+        : signal,
+    });
+    if (resp.ok) {
+      return await resp.text();
+    }
+    const errText = await resp.text();
+    throw new Error(`本地编译失败 (${resp.status}): ${errText.slice(0, 500)}`);
+  }
+
+  function wrapTikzDocument(code) {
+    // If user already wrapped in \documentclass, use as-is
+    if (/\\documentclass/i.test(code)) return code;
+
+    // Detect package needs
+    const needsPgfplots = /\\begin\{(axis|groupplot|polaraxis|ternaryaxis)\}|\\addplot|\\pgfplotsset/i.test(code);
+    const needsAmsmath = /\\boldsymbol|\\DeclareMathOperator|\\begin\{align|\\begin\{gather|\\begin\{multline/i.test(code);
+    const needsAmssymb = /\\mathbb|\\mathfrak|\\blacktriangle|\\blacksquare/i.test(code);
+
+    let preamble = `\\documentclass[tikz,border=5pt]{standalone}\n\\usepackage{tikz}\n\\usetikzlibrary{arrows.meta,positioning,shapes,calc,patterns,decorations.pathmorphing}`;
+    if (needsAmsmath) preamble += `\n\\usepackage{amsmath}`;
+    if (needsAmssymb) preamble += `\n\\usepackage{amssymb}`;
+    if (needsPgfplots) preamble += `\n\\usepackage{pgfplots}\n\\pgfplotsset{compat=1.18}`;
+
+    return `${preamble}\n\\begin{document}\n${code}\n\\end{document}`;
+  }
+
+  function setStatus(type, text) {
+    statusDot.className = `status-dot ${type}`;
+    statusText.textContent = text;
+  }
+
+  // ─── Folder picker ───
+  document.getElementById('btnPickFolder').addEventListener('click', async () => {
+    try {
+      dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      folderLabel.textContent = dirHandle.name;
+      toast(`已选择文件夹: ${dirHandle.name}`, 'info');
+    } catch (e) {
+      if (e.name !== 'AbortError') toast('选择文件夹失败: ' + e.message, 'error');
+    }
+  });
+
+  // ─── Export ───
+  document.getElementById('btnExport').addEventListener('click', async () => {
+    const code = editor.value.trim();
+    if (!code) { toast('没有可导出的代码', 'error'); return; }
+
+    // Use rendered SVG content (works for both SVG and TikZ)
+    const exportContent = renderedSvgContent;
+    if (!exportContent) {
+      toast(currentCodeType === 'tikz' ? 'TikZ 编译未完成，无法导出' : '没有有效的 SVG 内容', 'error');
+      return;
+    }
+
+    currentNum = parseFloat(startNum.value) || 0;
+    const step = calcStep(currentNum);
+    const name = (fileName.value || 'icon').replace(/[^a-zA-Z0-9_\-一-鿿]/g, '');
+    const finalName = `${name}-${currentNum}.svg`;
+
+    try {
+      if (dirHandle) {
+        await writeFile(dirHandle, finalName, exportContent);
+      } else {
+        downloadBlob(finalName, exportContent);
+      }
+      exportCount++;
+      exportCounter.textContent = `已导出: ${exportCount} 个文件`;
+      addHistory(finalName, exportContent, editor.value.trim());
+      currentNum = Math.round((currentNum + step) * 1e10) / 1e10;
+      startNum.value = currentNum;
+      toast(`已导出: ${finalName}`, 'success');
+    } catch (e) {
+      toast('导出失败: ' + e.message, 'error');
+    }
+  });
+
+  // ─── Batch export ───
+  document.getElementById('btnExportAll').addEventListener('click', () => {
+    if (history.length === 0) { toast('没有历史记录可导出', 'error'); return; }
+    historyPanel.classList.add('open');
+  });
+
+  // ─── Format ───
+  document.getElementById('btnFormat').addEventListener('click', () => {
+    const code = editor.value.trim();
+    if (!code) return;
+
+    const type = detectCodeType(code);
+
+    if (type === 'tikz') {
+      // Simple TikZ formatting: normalize indentation for \begin/\end blocks
+      const formatted = formatTikz(code);
+      editor.value = formatted;
+      editor.dispatchEvent(new Event('input'));
+      toast('已格式化 (TikZ)', 'info');
+      return;
+    }
+
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(code, 'image/svg+xml');
+      if (doc.querySelector('parsererror')) { toast('SVG 有误，无法格式化', 'error'); return; }
+      const svg = doc.documentElement;
+      if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      const formatted = formatXml(svg.outerHTML);
+      editor.value = formatted;
+      editor.dispatchEvent(new Event('input'));
+      toast('已格式化', 'info');
+    } catch (e) {
+      toast('格式化失败: ' + e.message, 'error');
+    }
+  });
+
+  function formatTikz(code) {
+    const lines = code.split('\n');
+    let indent = 0;
+    const result = [];
+    // Only indent environments that contain TikZ drawing blocks
+    const indentEnvs = /^(tikzpicture|scope|pgfonlayer|axis|groupplot|pgfornament|tikzfadingfrompicture)$/;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { result.push(''); continue; }
+      // Decrease indent before \end{indentable-env}
+      const endMatch = trimmed.match(/^\\end\{(\w+)\}/);
+      if (endMatch && indentEnvs.test(endMatch[1])) indent = Math.max(indent - 1, 0);
+      result.push('  '.repeat(indent) + trimmed);
+      // Increase indent after \begin{indentable-env}
+      const beginMatch = trimmed.match(/^\\begin\{(\w+)\}/);
+      if (beginMatch && indentEnvs.test(beginMatch[1])) indent++;
+    }
+    return result.join('\n');
+  }
+
+  // ─── Clear ───
+  document.getElementById('btnClear').addEventListener('click', () => {
+    editor.value = '';
+    editor.dispatchEvent(new Event('input'));
+  });
+
+  // ─── Confirm (add rendered SVG to history) ───
+  document.getElementById('btnConfirm').addEventListener('click', () => {
+    if (!renderedSvgContent) {
+      toast('没有可确认的渲染内容', 'error');
+      return;
+    }
+    const code = editor.value.trim();
+    if (!code) { toast('编辑器为空', 'error'); return; }
+    const name = (fileName.value || 'icon').replace(/[^a-zA-Z0-9_\-一-鿿]/g, '');
+    const finalName = `${name}-${new Date().toISOString().slice(0,19).replace(/[T:]/g, '-')}.svg`;
+    addHistory(finalName, renderedSvgContent, code);
+    toast(`已确认并计入历史: ${finalName}`, 'success');
+  });
+
+  // ─── History ───
+  document.getElementById('btnHistory').addEventListener('click', () => {
+    historyPanel.classList.toggle('open');
+  });
+  document.getElementById('btnCloseHistory').addEventListener('click', () => {
+    historyPanel.classList.remove('open');
+  });
+
+  document.getElementById('selectAllHistory').addEventListener('change', (e) => {
+    historyList.querySelectorAll('.history-item-check').forEach(cb => {
+      cb.checked = e.target.checked;
+    });
+  });
+
+  document.getElementById('btnExportSelected').addEventListener('click', async () => {
+    const checked = [...historyList.querySelectorAll('.history-item-check:checked')];
+    if (checked.length === 0) { toast('请先选择要导出的记录', 'error'); return; }
+
+    let targetDir = dirHandle;
+    if (!targetDir) {
+      try {
+        targetDir = await window.showDirectoryPicker({ mode: 'readwrite' });
+        dirHandle = targetDir;
+        folderLabel.textContent = targetDir.name;
+      } catch (e) {
+        if (e.name !== 'AbortError') toast('选择文件夹失败', 'error');
+        return;
+      }
+    }
+
+    let ok = 0;
+    for (const cb of checked) {
+      const idx = parseInt(cb.dataset.idx);
+      try {
+        await writeFile(targetDir, history[idx].name, history[idx].svg);
+        ok++;
+      } catch { /* skip */ }
+    }
+    toast(`导出完成: ${ok}/${checked.length}`, 'success');
+  });
+
+  function addHistory(name, svg, source) {
+    history.unshift({ name, svg, source: source || svg, time: new Date() });
+    if (history.length > 200) history.length = 200;
+    renderHistory();
+  }
+
+  function renderHistory() {
+    historyList.innerHTML = history.map((item, i) => `
+      <div class="history-item" data-idx="${i}">
+        <input type="checkbox" class="history-item-check" data-idx="${i}">
+        <div class="history-thumb">${miniSvg(item.svg)}</div>
+        <div class="history-meta">
+          <div class="name">${escHtml(item.name)}</div>
+          <div class="time">${formatTime(item.time)}</div>
+        </div>
+      </div>
+    `).join('');
+
+    historyList.querySelectorAll('.history-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.type === 'checkbox') return;
+        const idx = parseInt(el.dataset.idx);
+        editor.value = history[idx].source || history[idx].svg;
+        editor.dispatchEvent(new Event('input'));
+        historyPanel.classList.remove('open');
+        toast(`已加载: ${history[idx].name}`, 'info');
+      });
+    });
+
+    // Sync select-all checkbox
+    historyList.querySelectorAll('.history-item-check').forEach(cb => {
+      cb.addEventListener('change', syncSelectAll);
+    });
+  }
+
+  function syncSelectAll() {
+    const cbs = historyList.querySelectorAll('.history-item-check');
+    const selectAllCb = document.getElementById('selectAllHistory');
+    if (cbs.length === 0) { selectAllCb.checked = false; return; }
+    selectAllCb.checked = [...cbs].every(cb => cb.checked);
+  }
+
+  // ─── Helpers ───
+  async function writeFile(dir, name, content) {
+    const file = await dir.getFileHandle(name, { create: true });
+    const writable = await file.createWritable();
+    await writable.write(new Blob([content], { type: 'image/svg+xml' }));
+    await writable.close();
+  }
+
+  function downloadBlob(name, content) {
+    const blob = new Blob([content], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function miniSvg(svg) {
+    const clean = svg.replace(/<\?xml[^?]*\?>/, '').replace(/<!DOCTYPE[^>]*>/, '');
+    if (clean.length > 2000) return '<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="2" fill="#6c8cff" opacity=".3"/></svg>';
+    return clean;
+  }
+
+  function formatTime(d) {
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function formatXml(xml) {
+    let formatted = '';
+    let indent = 0;
+    const lines = xml.replace(/>\s*</g, '>\n<').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith('</')) indent = Math.max(indent - 1, 0);
+      formatted += '  '.repeat(indent) + trimmed + '\n';
+      if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.startsWith('<?') &&
+          !trimmed.endsWith('/>') && !trimmed.includes('</')) {
+        indent++;
+      }
+    }
+    return formatted.trim();
+  }
+
+  // ─── Tab support in editor ───
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
+      editor.selectionStart = editor.selectionEnd = start + 2;
+      editor.dispatchEvent(new Event('input'));
+    }
+  });
+
+  // ─── Keyboard shortcuts ───
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      document.getElementById('btnExport').click();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      document.getElementById('btnFormat').click();
+    }
+    // Escape to close editor
+    if (e.key === 'Escape' && editorOpen) {
+      closeEditor();
+    }
+  });
+
+  // ─── Init: sync startNum ───
+  startNum.addEventListener('change', () => {
+    currentNum = parseFloat(startNum.value) || 0;
+  });
+
+  // ─── Step +/- buttons ───
+  const startNumInc = document.getElementById('startNumInc');
+  const startNumDec = document.getElementById('startNumDec');
+
+  startNumInc.addEventListener('click', () => {
+    const val = parseFloat(startNum.value) || 0;
+    const step = calcStep(val);
+    currentNum = Math.round((val + step) * 1e10) / 1e10;
+    startNum.value = currentNum;
+  });
+
+  startNumDec.addEventListener('click', () => {
+    const val = parseFloat(startNum.value) || 0;
+    const step = calcStep(val);
+    currentNum = Math.round((val - step) * 1e10) / 1e10;
+    if (currentNum < 0) currentNum = 0;
+    startNum.value = currentNum;
+  });
+
+  // ─── Zoom & Pan ───
+  function applyTransform() {
+    viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    zoomPct.textContent = `${Math.round(scale * 100)}%`;
+  }
+
+  function zoomAt(cx, cy, newScale) {
+    newScale = Math.max(0.1, Math.min(10, newScale));
+    const rect = preview.getBoundingClientRect();
+    const px = cx - rect.left;
+    const py = cy - rect.top;
+    panX = px - (px - panX) * (newScale / scale);
+    panY = py - (py - panY) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }
+
+  function zoomCenter(delta) {
+    const rect = preview.getBoundingClientRect();
+    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, scale + delta);
+  }
+
+  document.getElementById('zoomIn').addEventListener('click', () => zoomCenter(0.25));
+  document.getElementById('zoomOut').addEventListener('click', () => zoomCenter(-0.25));
+  document.getElementById('zoomReset').addEventListener('click', () => { scale = 1; panX = 0; panY = 0; applyTransform(); });
+  zoomPct.addEventListener('click', () => { scale = 1; panX = 0; panY = 0; applyTransform(); });
+
+  // Wheel zoom
+  preview.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoomAt(e.clientX, e.clientY, scale + delta * scale);
+  }, { passive: false });
+
+  // Drag to pan
+  preview.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    isPanning = true;
+    preview.classList.add('dragging');
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panOriginX = panX;
+    panOriginY = panY;
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = panOriginX + (e.clientX - panStartX);
+    panY = panOriginY + (e.clientY - panStartY);
+    applyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    isPanning = false;
+    preview.classList.remove('dragging');
+  });
+
+  // ─── Preview background mode ───
+  const bgModes = document.getElementById('bgModes');
+  bgModes.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-bg]');
+    if (!btn) return;
+    const mode = btn.dataset.bg;
+    preview.className = `preview ${mode}`;
+    bgModes.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+
+  // ─── Initial icon position setup ───
+  window.addEventListener('resize', () => {
+    if (!editorOpen) positionEditorCollapsed();
+  });
+})();
+</script>
+
+</body>
+</html>
