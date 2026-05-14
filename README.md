@@ -77,6 +77,3 @@ node tikz-server.js
 
 * **浏览器兼容性**：核心的静默导出功能依赖 `window.showDirectoryPicker` API。在 Firefox 或 Safari 中，将自动降级为常规的浏览器单文件下载模式。
 * **安全提示**：本地 TikZ 编译服务目前主要自用，未进行严格的沙箱隔离。请勿将其暴露在公网，或使用它编译来源不明、含有敏感系统调用指令的 LaTeX 代码。
-```
-
-```
