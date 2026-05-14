@@ -20,7 +20,6 @@
 ### ⚙️ 后端编译服务 (Node.js)
 * **原生 TikZ 转 SVG**：支持直接输入 LaTeX/TikZ 代码，后端调用 `pdflatex` 编译后通过 `pdftocairo` 无损转储为 SVG 文件。
 * **智能环境探测**：自动匹配主流 Windows TeX Live 路径，即插即用。
-* **自动包裹前言**：智能识别代码片段所需的宏包（如 `amsmath`, `pgfplots`），无需每次手写 `\documentclass`。
 
 ---
 
